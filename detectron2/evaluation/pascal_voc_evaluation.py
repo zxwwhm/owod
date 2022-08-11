@@ -458,7 +458,7 @@ def voc_eval(detpath, annopath, imagesetfile, classname, ovthresh=0.5, use_07_me
     splitlines = [x.strip().split(" ") for x in lines]
     # if classname=="unknown":
     #     confidence = np.array([float(x[1]) for x in splitlines])
-    #     unknown_mask=(confidence>=0.2)
+    #     unknown_mask=(confidence>0.1)
     #     unknown_ids=np.nonzero(unknown_mask)[0]
     #     confidence=confidence[unknown_mask]
     #     image_ids = [x[0] for idx,x in enumerate(splitlines) if idx in unknown_ids]

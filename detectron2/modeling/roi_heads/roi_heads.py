@@ -515,6 +515,7 @@ class Res5ROIHeads(ROIHeads):
 
             # todo 这个处理成两份有些困难
             unknown_features = self.get_unknown_features(features, proposals)
+            uno_unknwon_features = self.get_unknown_features(uno_features, proposals)
  
             device = first_features.device
             seen_gt_class = first_features.shape[0]
@@ -527,6 +528,7 @@ class Res5ROIHeads(ROIHeads):
             second = torch.cat([second_features, unknown_features])
             mask_lab = uno_classes < self.seen_class
             feats = [first.detach().to(device), second.detach().to(device)]
+            unknown_feats = [unknown_features.detach().to(device), uno_unknwon_features.detach().to(device)]
 
         del targets
 
@@ -542,7 +544,7 @@ class Res5ROIHeads(ROIHeads):
 
             losses = self.box_predictor.losses(predictions, proposals, input_features)
 
-            losses.update(self.box_predictor.get_uno_loss(feats, uno_classes, mask_lab))
+            losses.update(self.box_predictor.get_uno_loss(feats, uno_classes, mask_lab,unknown_feats))
 
             if self.mask_on:
                 proposals, fg_selection_masks = select_foreground_proposals(

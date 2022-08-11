@@ -133,8 +133,9 @@ class MultiHeadResNet(nn.Module):
             num_iters=3, epsilon=0.05
         )
         self.seen_class = num_labeled
-
-        self.cos = nn.CosineSimilarity(dim=1, eps=1e-6)
+        self.last_iter_features = None
+        self.cos = nn.CosineSimilarity(dim=-1, eps=1e-6)
+        self.temperature = 1.5
 
     @torch.no_grad()
     def _reinit_all_layers(self):
@@ -190,7 +191,7 @@ class MultiHeadResNet(nn.Module):
                 loss += self.cross_entropy_loss(logits[other_view], targets[view])
         return loss / 2
 
-    def get_uno_loss(self, feats, labels, mask_lab):
+    def get_uno_loss(self, feats, labels, mask_lab,unknown_feats):
         labels = labels.long()
         self.normalize_prototypes()
         outputs = self(feats)
@@ -212,18 +213,18 @@ class MultiHeadResNet(nn.Module):
         targets_over = torch.zeros_like(logits_over)
         nlc = self.seen_class
 
-        unknwon_feature = feats[0][~mask_lab]
+        unknown_feature = feats[0][~mask_lab]
         unknwon_logits=logits[0,0,~mask_lab,nlc:]
-        unknwon_num=unknwon_feature.shape[0]
-        feature_dim=unknwon_feature.shape[1]
+        unknwon_num=unknown_feature.shape[0]
+        feature_dim=unknown_feature.shape[1]
         unknwon_max_logits=torch.zeros((unknwon_num,unknwon_num),device=device)
         # unknown_targets=torch.zeros_like(unknwon_max_logits)
         for i in range(unknwon_num):
             for j in range(unknwon_num):
                 unknwon_max_logits[i,j]=torch.max(unknwon_logits[i]*unknwon_logits[j])
         unknwon_max_logits=unknwon_max_logits.view(-1)
-        data1=unknwon_feature[:,None,:].expand(-1,unknwon_num,-1).reshape(-1,feature_dim) 
-        data2=unknwon_feature[None,...].expand(unknwon_num,-1,-1).reshape(-1,feature_dim)
+        data1=unknown_feature[:,None,:].expand(-1,unknwon_num,-1).reshape(-1,feature_dim) 
+        data2=unknown_feature[None,...].expand(unknwon_num,-1,-1).reshape(-1,feature_dim)
         cos_sim=self.cos(data1,data2)
         unknwon_targets=(cos_sim>=0.8).to(torch.float32)
         loss_pair=F.binary_cross_entropy_with_logits(
@@ -231,6 +232,24 @@ class MultiHeadResNet(nn.Module):
             unknwon_targets,
             reduction="mean",
         )
+        # unknwon_feature
+        # print(unknwon_feature.shape,unknown_feature2.shape)
+        loss_uniform=0
+        if self.last_iter_features != None:
+            unknown_feature1 = unknown_feats[0]
+            unknown_feature2 = unknown_feats[1]
+            for unk_1,unk_2 in zip(unknown_feature1,unknown_feature2):
+                sim=self.cos(unk_1,unk_2)
+                # print(sim)
+                unk_expand = unk_1.expand_as(self.last_iter_features)# gt 
+                diss_sim=self.cos(unk_expand,self.last_iter_features)
+                sim=(sim/self.temperature).exp()
+                diss_sim=(diss_sim/self.temperature).exp().sum()
+                
+                loss_uniform+=-torch.log(sim/(sim+diss_sim))
+                
+                
+            loss_uniform=0.1 * loss_uniform/unknwon_num
 
         for v in range(2):
             for h in range(1):
@@ -242,11 +261,12 @@ class MultiHeadResNet(nn.Module):
                 targets_over[v, h, ~mask_lab, nlc:] = self.sk(
                     outputs["logits_unlab_over"][v, h, ~mask_lab]
                 ).type_as(targets)
-
+        self.last_iter_features=feats[0]
         loss_cluster = self.swapped_prediction(logits, targets)
         loss_overcluster = self.swapped_prediction(logits_over, targets_over)
         loss_cluster = loss_cluster.mean()
         loss_overcluster = loss_overcluster.mean()
         loss = (loss_cluster + loss_overcluster) / 2
         loss+=loss_pair
+        loss+=loss_cluster
         return {"uno_loss": loss}

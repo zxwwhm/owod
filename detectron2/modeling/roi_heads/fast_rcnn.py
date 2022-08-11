@@ -657,7 +657,7 @@ class FastRCNNOutputLayers(nn.Module):
             self.seen_classes,
             10,
         )
-
+        
         self.clip_process = ClipProcess()
 
     @classmethod
@@ -770,8 +770,8 @@ class FastRCNNOutputLayers(nn.Module):
 
         return loss
 
-    def get_uno_loss(self, feats, uno_classes, mask_lab):
-        return self.uno_model.get_uno_loss(feats, uno_classes, mask_lab)
+    def get_uno_loss(self, feats, uno_classes, mask_lab,unknown_feats):
+        return self.uno_model.get_uno_loss(feats, uno_classes, mask_lab,unknown_feats)
 
     def get_clustering_loss(self, input_features, proposals):
         if not self.enable_clustering:
