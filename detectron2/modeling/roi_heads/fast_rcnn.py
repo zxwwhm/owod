@@ -151,7 +151,7 @@ def uno_fast_rcnn_inference_single_image(
     # print(boxes.shape)[117, 4]
     # exit()
     origin_boxes = boxes.clone()
-    
+    # print(filter_inds[:, 1].shape)
     # 2. Apply NMS for each class independently.
     keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
 
@@ -171,7 +171,13 @@ def uno_fast_rcnn_inference_single_image(
 
         uno_idx = uno_pred_idx > seen_classes
         uno_box = origin_boxes[uno_idx]
-        uno_scores = uno_scores[uno_idx]
+        uno_scores=uno_scores[uno_idx]
+        if uno_box.shape[0]!=0:
+            uno_scores = torch.max(uno_scores,dim=-1)[0]
+            idxs=torch.ones(uno_scores.shape[0],device=uno_scores.device)*80
+            keep_uno = batched_nms(uno_box, uno_scores, idxs, nms_thresh)
+            uno_box=uno_box[keep_uno]
+            uno_scores=uno_scores[keep_uno]
     else:
         uno_box=torch.zeros((0,4))
 
@@ -189,10 +195,11 @@ def uno_fast_rcnn_inference_single_image(
         # print( torch.max(uno_scores,dim=-1)[0].shape,uno_box.shape)
         # # print(uno_scores.shape,logits[keep].shape,scores.shape)
         # exit()
-        try:
-            uno_result.scores = torch.max(uno_scores,dim=-1)[0]
-        except RuntimeError:
-            print(uno_box.shape,uno_scores.shape)
+        uno_result.scores=uno_scores
+        # try:
+        #     uno_result.scores = torch.max(uno_scores,dim=-1)[0]
+        # except RuntimeError:
+        #     print(uno_box.shape,uno_scores.shape)
         uno_result.pred_classes = torch.zeros(uno_scores.shape[0], device=scores.device) + 80
         # uno_result.logits = uno_logits[uno_idx]
         uno_filter_inds = origin_filter_inds[uno_idx]
@@ -204,6 +211,110 @@ def uno_fast_rcnn_inference_single_image(
 
     return final_result, final_inds
 
+# def uno_fast_rcnn_inference_single_image(
+#         uno_preds, boxes, scores, image_shape, score_thresh, nms_thresh, topk_per_image, prediction, seen_classes
+# ):
+#     """
+#     Single-image inference. Return bounding-box detection results by thresholding
+#     on scores and applying non-maximum suppression (NMS).
+
+#     Args:
+#         Same as `fast_rcnn_inference`, but with boxes, scores, and image shapes
+#         per image.
+
+#     Returns:
+#         Same as `fast_rcnn_inference`, but for only one image.
+#     """
+    
+#     logits = prediction
+#     valid_mask = torch.isfinite(boxes).all(dim=1) & torch.isfinite(scores).all(dim=1)
+#     if not valid_mask.all():
+#         boxes = boxes[valid_mask]
+#         scores = scores[valid_mask]
+#         logits = logits[valid_mask]
+#         uno_preds = uno_preds[valid_mask]
+    
+#     scores = scores[:, :-1]
+#     logits = logits[:, :-1]
+    
+#     num_bbox_reg_classes = boxes.shape[1] // 4
+#     # Convert to Boxes to use the `clip` function ...
+#     boxes = Boxes(boxes.reshape(-1, 4))
+#     boxes.clip(image_shape)
+#     boxes = boxes.tensor.view(-1, num_bbox_reg_classes, 4)  # R x C x 4
+#     # 1. Filter results based on detection scores. It can make NMS more efficient
+#     #    by filtering out low-confidence detections.
+#     filter_mask = scores > score_thresh  # R x K
+
+#     # R' x 2. First column contains indices of the R predictions;
+#     # Second column contains indices of classes.
+#     filter_inds = filter_mask.nonzero()
+#     if num_bbox_reg_classes == 1:
+#         boxes = boxes[filter_inds[:, 0], 0]
+#     else:
+#         boxes = boxes[filter_mask]
+    
+#     uno_scores=F.softmax(uno_preds,dim=-1)
+#     scores = scores[filter_mask]
+    
+#     uno_scores=uno_scores[filter_inds[:, 0]]
+#     uno_logits = uno_preds[filter_inds[:, 0]]
+#     logits = logits[filter_inds[:, 0]]
+#     # print(logits.shape)[117, 81]
+#     # print(uno_scores.shape)[117, 30]
+#     # print(boxes.shape)[117, 4]
+#     # exit()
+#     origin_boxes = boxes.clone()
+    
+#     # 2. Apply NMS for each class independently.
+#     keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
+
+#     origin_filter_inds = filter_inds.clone()
+
+#     if topk_per_image >= 0:
+#         keep = keep[:topk_per_image]
+#     boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
+#     # t = torch.zeros(origin_boxes.shape[0])
+#     # t[keep] = 1
+#     # t_idx = t != 1
+#     if uno_scores.shape[0]!=0:
+#         uno_pred_idx=uno_scores.max(dim=-1)[1]
+
+#         uno_pred_idx[keep] = -1
+#         # uno_boxes = origin_boxes[t_idx]
+
+#         uno_idx = uno_pred_idx > seen_classes
+#         uno_box = origin_boxes[uno_idx]
+#         uno_scores = uno_scores[uno_idx]
+#         print(uno_scores.shape,uno_box.shape)
+#     else:
+#         uno_box=torch.zeros((0,4))
+
+#     logits = logits[keep]
+
+#     result = Instances(image_shape)
+#     result.pred_boxes = Boxes(boxes)
+#     result.scores = scores
+#     result.pred_classes = filter_inds[:, 1]
+#     # result.logits = logits
+
+#     if uno_box.shape[0]!=0:
+#         uno_result = Instances(image_shape)
+#         uno_result.pred_boxes = Boxes(uno_box)
+#         try:
+#             uno_result.scores = torch.max(uno_scores,dim=-1)[0]
+#         except RuntimeError:
+#             print(uno_box.shape,uno_scores.shape)
+#         uno_result.pred_classes = torch.zeros(uno_scores.shape[0], device=scores.device) + 80
+#         # uno_result.logits = uno_logits[uno_idx]
+#         uno_filter_inds = origin_filter_inds[uno_idx]
+#         final_result = Instances.cat([result, uno_result])
+#         final_inds = torch.cat([filter_inds[:, 0], uno_filter_inds[:, 0]])
+#     else:
+#         final_result=result
+#         final_inds=filter_inds[:, 0]
+
+#     return final_result, final_inds
 
 def fast_rcnn_inference_single_image(
         boxes, scores, image_shape, score_thresh, nms_thresh, topk_per_image, prediction
@@ -465,7 +576,8 @@ class FastRCNNOutputs:
         """
         return {"loss_cls": self.softmax_cross_entropy_loss(), 
         "loss_box_reg": self.box_reg_loss(),
-        "loss_sa_cls":self.sa_cross_entropy_loss()}
+        # "loss_sa_cls":self.sa_cross_entropy_loss()
+        }
 
     def sa_cross_entropy_loss(self):
         """
@@ -851,7 +963,7 @@ class FastRCNNOutputLayers(nn.Module):
             self.box_reg_loss_type,
         ).losses()
 
-        losses["loss_semantic"] = self.get_sa_loss(sa_semantic,proposals)
+        # losses["loss_semantic"] = self.get_sa_loss(sa_semantic,proposals)
         # if input_features is not None:
         #     # losses["loss_cluster_encoder"] = self.get_ae_loss(input_features)
         #     losses["loss_clustering"] = self.get_clustering_loss(input_features, proposals)

@@ -408,7 +408,7 @@ class RPN(nn.Module):
         losses = {
             "loss_rpn_cls": objectness_loss / normalizer,
             "loss_rpn_loc": localization_loss / normalizer,
-            "loss_rpn_semantic": loss_rpn_semantic/normalizer
+            # "loss_rpn_semantic": loss_rpn_semantic/normalizer
         }
         losses = {k: v * self.loss_weight.get(k, 1.0) for k, v in losses.items()}
         return losses
