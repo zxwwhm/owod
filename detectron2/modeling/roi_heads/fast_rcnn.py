@@ -113,6 +113,15 @@ def uno_fast_rcnn_inference_single_image(
     """
     
     logits = prediction
+    # logits[:,:seen_classes]=uno_preds[:,:seen_classes]
+    # for item1,item2,item3 in zip(uno_preds[:,:seen_classes],logits,scores):
+    #     print('------')
+    #     print(item1)
+    #     print(item2[:seen_classes])
+    #     print(item3[:seen_classes])
+    #     print(item2[-2:])
+    #     print(item3[-2:])
+    # scores=F.softmax(logits,dim=-1)
     valid_mask = torch.isfinite(boxes).all(dim=1) & torch.isfinite(scores).all(dim=1)
     if not valid_mask.all():
         boxes = boxes[valid_mask]
@@ -169,7 +178,7 @@ def uno_fast_rcnn_inference_single_image(
         uno_pred_idx[keep] = -1
         # uno_boxes = origin_boxes[t_idx]
 
-        uno_idx = uno_pred_idx > seen_classes
+        uno_idx = uno_pred_idx >= seen_classes
         uno_box = origin_boxes[uno_idx]
         uno_scores=uno_scores[uno_idx]
         if uno_box.shape[0]!=0:

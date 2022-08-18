@@ -11,8 +11,8 @@
 # (if you find something wrong in this, please raise an issue on GitHub)
 
 # Task 1
-python tools/train_net.py --num-gpus 3 --dist-url='tcp://127.0.0.1:52125' --resume --config-file ./configs/OWOD/t1/t1_train.yaml SOLVER.IMS_PER_BATCH 6 SOLVER.BASE_LR 0.01 OUTPUT_DIR "../output/t1_pair_cluster"
-python tools/train_net.py --num-gpus 3 --eval-only --dist-url='tcp://127.0.0.1:52125' --resume --config-file ./configs/OWOD/t1/t1_train.yaml SOLVER.IMS_PER_BATCH 9 SOLVER.BASE_LR 0.01 OUTPUT_DIR "../output/t1_pair_test_select" MODEL.WEIGHTS /lct/kno/output/t1_pair/model_final.pth
+python tools/train_net.py --num-gpus 3 --dist-url='tcp://127.0.0.1:52125' --resume --config-file ./configs/OWOD/t1/t1_train.yaml SOLVER.IMS_PER_BATCH 6 SOLVER.BASE_LR 0.01 OUTPUT_DIR "../output/t1_XXX"
+python tools/train_net.py --num-gpus 3 --eval-only --dist-url='tcp://127.0.0.1:52125' --resume --config-file ./configs/OWOD/t1/t1_train.yaml SOLVER.IMS_PER_BATCH 9 SOLVER.BASE_LR 0.01 OUTPUT_DIR "../output/t1_pair_test_nms" MODEL.WEIGHTS /lct/kno/output/t1_pair/model_final.pth
 # No need to finetune in Task 1, as there is no incremental component.
 
 python tools/train_net.py --num-gpus 8 --dist-url='tcp://127.0.0.1:52133' --config-file ./configs/OWOD/t1/t1_val.yaml SOLVER.IMS_PER_BATCH 8 SOLVER.BASE_LR 0.01 OWOD.TEMPERATURE 1.5 OUTPUT_DIR "./output/t1_final" MODEL.WEIGHTS "/home/joseph/workspace/OWOD/output/t1/model_final.pth"
