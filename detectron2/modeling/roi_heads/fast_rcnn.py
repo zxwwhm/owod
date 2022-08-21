@@ -775,7 +775,7 @@ class FastRCNNOutputLayers(nn.Module):
         # self.ae_model.apply(Xavier)
 
         self.uno_model = MultiHeadResNet(
-            self.seen_classes,
+            self.num_classes,
             10,
         )
         
@@ -825,7 +825,13 @@ class FastRCNNOutputLayers(nn.Module):
         """
         if x.dim() > 2:
             x = torch.flatten(x, start_dim=1)
-        scores = self.cls_score(x)
+        # scores = self.cls_score(x)
+        scores = self.uno_model.forward_scores(x)
+        # with torch.no_grad():
+        #     logits_unlab_max=outputs["logits_unlab"][0].max(dim=-1)[0][:,None]
+        #     logits_lab=outputs["logits_lab"]
+        #     scores=torch.cat((logits_lab[:,:-1],logits_unlab_max,logits_lab[:,-1:]),dim=-1)
+        
         proposal_deltas = self.bbox_pred(x)
         sa_semantic = self.feature_to_sa(x)
         sa_cls_scores = self.sa_to_cls(sa_semantic)

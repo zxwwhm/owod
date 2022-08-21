@@ -155,6 +155,17 @@ class MultiHeadResNet(nn.Module):
             self.head_unlab.normalize_prototypes()
             self.head_unlab_over.normalize_prototypes()
 
+    # @torch.no_grad()
+    def forward_scores(self, feats):
+        logits_lab=self.head_lab(F.normalize(feats))
+        logits_unlab, _ = self.head_unlab(feats)
+        max_value,_=logits_unlab[0].max(dim=-1)
+        logits_unlab_max=max_value[:,None]
+        scores=torch.cat((logits_lab[:,:-1],logits_unlab_max,logits_lab[:,-1:]),dim=-1)
+
+        return scores
+
+
     def forward_heads(self, feats):
         out = {"logits_lab": self.head_lab(F.normalize(feats))}
         if hasattr(self, "head_unlab"):
@@ -195,6 +206,7 @@ class MultiHeadResNet(nn.Module):
 
     def get_uno_loss(self, feats, labels, mask_lab,unknown_feats):
         labels = labels.long()
+        
         self.normalize_prototypes()
         outputs = self(feats)
         
@@ -207,7 +219,7 @@ class MultiHeadResNet(nn.Module):
         logits = torch.cat([outputs["logits_lab"], outputs["logits_unlab"]], dim=-1)
         logits_over = torch.cat([outputs["logits_lab"], outputs["logits_unlab_over"]], dim=-1)
         targets_lab = (
-            F.one_hot(labels[mask_lab], num_classes=self.seen_class).float().to(labels.device)
+            F.one_hot(labels[mask_lab], num_classes=self.num_classes).float().to(labels.device)
         )
 
         # 10*20 unknwon feature 1 targets-->5000 si 10 sj 10 sij 10 。
