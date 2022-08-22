@@ -487,6 +487,7 @@ class FastRCNNOutputs:
             self._log_accuracy()
             self.pred_class_logits[:, self.invalid_class_range] = -10e10
             # self.log_logits(self.pred_class_logits, self.gt_classes)
+            # print(self.gt_classes.shape,self.pred_class_logits.shape)
             return F.cross_entropy(self.pred_class_logits, self.gt_classes, reduction="mean")
 
     def log_logits(self, logits, cls):
@@ -585,7 +586,7 @@ class FastRCNNOutputs:
         """
         return {"loss_cls": self.softmax_cross_entropy_loss(), 
         "loss_box_reg": self.box_reg_loss(),
-        # "loss_sa_cls":self.sa_cross_entropy_loss()
+        "loss_sa_cls":self.sa_cross_entropy_loss()
         }
 
     def sa_cross_entropy_loss(self):
@@ -775,10 +776,14 @@ class FastRCNNOutputLayers(nn.Module):
         # self.ae_model.apply(Xavier)
 
         self.uno_model = MultiHeadResNet(
-            self.num_classes,
+            self.seen_classes,
             10,
         )
+
+        sa_uno_model=MultiHeadResNet(self.seen_classes,10,feat_dim=512)
         
+        self.sa_unk_head_unlab=sa_uno_model.head_unlab
+
         self.clip_process = ClipProcess()
 
     @classmethod
@@ -825,8 +830,8 @@ class FastRCNNOutputLayers(nn.Module):
         """
         if x.dim() > 2:
             x = torch.flatten(x, start_dim=1)
-        # scores = self.cls_score(x)
-        scores = self.uno_model.forward_scores(x)
+        scores = self.cls_score(x)
+        # scores = self.uno_model.forward_scores(x)
         # with torch.no_grad():
         #     logits_unlab_max=outputs["logits_unlab"][0].max(dim=-1)[0][:,None]
         #     logits_lab=outputs["logits_lab"]
@@ -954,8 +959,30 @@ class FastRCNNOutputLayers(nn.Module):
         mse = nn.MSELoss(reduction='mean')
         loss = mse(fg_features, target.to(fg_features.device))
         return loss
+
+    def get_unk_sa_loss(self,unknown):
+        unk_samantic_features=self.feature_to_sa(unknown[0])
+        unk_sa_scores=self.sa_unk_head_unlab(unk_samantic_features)[0][0]
+        cls=unknown[1]
+        unknwon_num=unknown[0].shape[0]
+        unknwon_max_logits=torch.zeros((unknwon_num,unknwon_num),device=unknown[0].device)
+        for i in range(unknwon_num):
+            for j in range(unknwon_num):
+                unknwon_max_logits[i,j]=unk_sa_scores[i,cls[i]]*unk_sa_scores[j,cls[j]]
+        unknwon_max_logits=unknwon_max_logits.view(-1)
+        unk_targets=(cls[None,:]==cls[:,None]).to(torch.float32).view(-1)
+        # print(unk_targets)
+        loss_unk_sa=F.binary_cross_entropy_with_logits(
+                unknwon_max_logits,
+                unk_targets,
+                reduction="mean",
+            )
+        # print(loss_unk_sa)
+        return loss_unk_sa*0.1
+        # print(loss_unk_sa)
+
     # TODO: move the implementation to this class.
-    def losses(self, predictions, proposals, input_features=None):
+    def losses(self, predictions, proposals, input_features=None, unknown=None):
         """
         Args:
             predictions: return values of :meth:`forward()`.
@@ -966,6 +993,7 @@ class FastRCNNOutputLayers(nn.Module):
         Returns:
             Dict[str, Tensor]: dict of losses
         """
+        
         scores, proposal_deltas ,sa_semantic,sa_cls_scores= predictions
         losses = FastRCNNOutputs(
             self.box2box_transform,
@@ -977,8 +1005,8 @@ class FastRCNNOutputLayers(nn.Module):
             self.smooth_l1_beta,
             self.box_reg_loss_type,
         ).losses()
-
-        # losses["loss_semantic"] = self.get_sa_loss(sa_semantic,proposals)
+        losses['loss_unk_sa'] = self.get_unk_sa_loss(unknown)
+        losses["loss_semantic"] = self.get_sa_loss(sa_semantic,proposals)
         # if input_features is not None:
         #     # losses["loss_cluster_encoder"] = self.get_ae_loss(input_features)
         #     losses["loss_clustering"] = self.get_clustering_loss(input_features, proposals)

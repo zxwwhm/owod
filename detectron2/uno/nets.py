@@ -97,12 +97,13 @@ class MultiHeadResNet(nn.Module):
             overcluster_factor=3,
             num_heads=1,
             num_hidden_layers=1,
+            feat_dim=2048
     ):
         super().__init__()
 
         # self.unknown_store = Store(num_unlabeled,20)
         # todo 2048
-        self.feat_dim = 2048
+        self.feat_dim = feat_dim
 
         # head for label
         self.head_lab = Prototypes(self.feat_dim, num_labeled)
@@ -209,8 +210,8 @@ class MultiHeadResNet(nn.Module):
         
         self.normalize_prototypes()
         outputs = self(feats)
-        
-        device=feats[0].device
+
+        # print(outputs["logits_lab"].shape,outputs["logits_unlab"].shape)
 
         outputs["logits_lab"] = (
             outputs["logits_lab"].unsqueeze(1).expand(-1, 1, -1, -1)
@@ -219,7 +220,7 @@ class MultiHeadResNet(nn.Module):
         logits = torch.cat([outputs["logits_lab"], outputs["logits_unlab"]], dim=-1)
         logits_over = torch.cat([outputs["logits_lab"], outputs["logits_unlab_over"]], dim=-1)
         targets_lab = (
-            F.one_hot(labels[mask_lab], num_classes=self.num_classes).float().to(labels.device)
+            F.one_hot(labels[mask_lab], num_classes=self.seen_classes).float().to(labels.device)
         )
 
         # 10*20 unknwon feature 1 targets-->5000 si 10 sj 10 sij 10 。
@@ -231,6 +232,11 @@ class MultiHeadResNet(nn.Module):
         loss_uniform=0
 
         storage = get_event_storage()
+
+        logits_unlab = logits[0,0,~mask_lab,nlc:]
+        # print(logits_unlab.shape)
+        visual_pred_cls= logits_unlab.max(dim=-1)[1]
+
         if storage.iter == self.clustering_start_iter:
             self.last_iter_features=feats[0]
             self.last_iter_features_gt = labels
@@ -239,7 +245,7 @@ class MultiHeadResNet(nn.Module):
             save_features = feats[0]
             unk_features = save_features[labels == self.num_classes-1]
 
-            logits_unlab = logits[0,0,~mask_lab,nlc:]
+            # logits_unlab = logits[0,0,~mask_lab,nlc:]
             unknwon_num=unk_features.shape[0]
             feature_dim=unk_features.shape[1]
             unknwon_max_logits=torch.zeros((unknwon_num,unknwon_num),device=logits_unlab.device)
@@ -337,4 +343,4 @@ class MultiHeadResNet(nn.Module):
         loss = (loss_cluster + loss_overcluster) / 2
         loss+=loss_pair
         loss+=loss_cluster+loss_uniform
-        return {"uno_loss": loss}
+        return {"uno_loss": loss},visual_pred_cls

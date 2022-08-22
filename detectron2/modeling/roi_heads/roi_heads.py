@@ -541,10 +541,12 @@ class Res5ROIHeads(ROIHeads):
             del features
             if self.compute_energy_flag:
                 self.compute_energy(predictions, proposals)
+            
+            loss_uno,visual_pred_cls=self.box_predictor.get_uno_loss(feats, uno_classes, mask_lab,unknown_feats)
 
-            losses = self.box_predictor.losses(predictions, proposals, input_features)
+            losses = self.box_predictor.losses(predictions, proposals, input_features,[unknown_features,visual_pred_cls])
 
-            losses.update(self.box_predictor.get_uno_loss(feats, uno_classes, mask_lab,unknown_feats))
+            losses.update(loss_uno)
 
             if self.mask_on:
                 proposals, fg_selection_masks = select_foreground_proposals(
